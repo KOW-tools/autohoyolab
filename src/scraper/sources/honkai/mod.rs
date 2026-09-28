@@ -62,10 +62,34 @@ pub async fn scrape_and_store(global: &Arc<Global>) -> anyhow::Result<()> {
         new_count += 1;
     }
 
-    tracing::info!(new = new_count, total, "honkai scrape complete");
+    let deactivated = collection
+        .update_many(
+            doc! { "active": true, "code": { "$nin": &candidates } },
+            doc! { "$set": { "active": false } },
+        )
+        .await?
+        .modified_count;
+    let reactivated = collection
+        .update_many(
+            doc! { "active": false, "code": { "$in": &candidates } },
+            doc! { "$set": { "active": true } },
+        )
+        .await?
+        .modified_count;
+
+    tracing::info!(
+        new = new_count,
+        deactivated,
+        reactivated,
+        total,
+        "honkai scrape complete"
+    );
 
     if new_count > 0 {
         discord::notify_new_codes(global, Game::Honkai, &new_valid_codes).await;
+    }
+
+    if new_count > 0 || deactivated > 0 || reactivated > 0 {
         global
             .response_cache
             .remove(&format!("/mihoyo/{}/codes", Game::Honkai.slug()))

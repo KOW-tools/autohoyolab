@@ -43,11 +43,10 @@ pub async fn scrape(global: &Arc<Global>) -> anyhow::Result<Vec<ParsedCode>> {
 /// Each row looks like:
 /// `|'''CODE'''||Feb 9, 26||Occasion||{{Item|Asterite|rarity=4|size=70|quantity=500}}...`
 pub fn parse_wikitext(wikitext: &str) -> Vec<ParsedCode> {
-    let active_end = wikitext
-        .find("==Legacy")
-        .or_else(|| wikitext.find("== Legacy"))
-        .unwrap_or(wikitext.len());
-    let active_section = &wikitext[..active_end];
+    let Some(active_section) = active_section(wikitext) else {
+        tracing::warn!("active/legacy headings not found on fandom page");
+        return Vec::new();
+    };
 
     let mut codes = Vec::new();
 
@@ -82,6 +81,34 @@ pub fn parse_wikitext(wikitext: &str) -> Vec<ParsedCode> {
     }
 
     codes
+}
+
+fn active_section(wikitext: &str) -> Option<&str> {
+    let mut start = None;
+    let mut offset = 0;
+
+    for line in wikitext.split_inclusive('\n') {
+        let heading = line
+            .trim()
+            .strip_prefix("==")
+            .and_then(|h| h.strip_suffix("=="))
+            .filter(|h| !h.starts_with('=') && !h.ends_with('='))
+            .map(str::trim);
+
+        match (heading, start) {
+            (Some(h), None) if h.eq_ignore_ascii_case("active") => {
+                start = Some(offset + line.len());
+            }
+            (Some(h), Some(s)) if h.eq_ignore_ascii_case("legacy") => {
+                return Some(&wikitext[s..offset]);
+            }
+            _ => {}
+        }
+
+        offset += line.len();
+    }
+
+    None
 }
 
 /// Extract text from `'''...'''` bold markup. Returns `None` if not bold.
