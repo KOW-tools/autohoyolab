@@ -29,14 +29,16 @@ impl RedeemResponse {
         self.retcode == -2001
     }
 
-    /// Code is invalid / does not exist.
+    /// Code is invalid / does not exist / cannot be used.
     pub fn is_invalid(&self) -> bool {
         // -1065 = invalid code
+        // -1007 = unable to use redemption code (dead code: consumed elsewhere
+        //         or not applicable); upstream also reports these as inactive
         // -2003 = incorrectly formatted
         // -2004 = invalid code
         // -2006 = max usage limit reached
         // -2014 = code not activated
-        matches!(self.retcode, -1065 | -2003 | -2004 | -2006 | -2014)
+        matches!(self.retcode, -1065 | -1007 | -2003 | -2004 | -2006 | -2014)
     }
 
     /// Redemption is on cooldown (rate limited).
